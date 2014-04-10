@@ -1,0 +1,78 @@
+### /etc/hotplug.d/iface/30-nsupdate
+###
+### Update the WAN interface's IPv4 address (A) record in the DNS
+### using the DNS UPDATE protocol.
+###
+### Author:       Simon Leinen  <simon.leinen@gmail.com>
+### Date Created: 10-Apr-2014
+###
+### based on instructions by Justin Foell found on
+### http://www.foell.org/justin/diy-dynamic-dns-with-openwrt-bind/
+###
+### I had to update Justin's script a little:
+###
+### 1) My WAN interface is called "ge00", not "wan".
+### 2) scan_interfaces fails to put the WAN interface's IPv4 address
+###    in a CONFIG_ variable.  Therefore, we use a fallback method to
+###    get it using "ip -4 addr show"
+###
+### Note that this needs the "bind-client" package installed.
+###
+### Tested on a WNDR3700v2 under CeroWrt Vancouver 3.10.18-1
+
+exec >>/tmp/foo.log 2>&1
+
+## The name of the "WAN" interface
+wan=ge00
+
+## Tag and facility under which messages are logged
+facility=daemon
+tag="30-nsupdate[$$]"
+
+## Authoritative name server to update
+nameserver=scsnms.switch.ch
+
+## Zone to update
+zonename=router.leinen.ch
+
+## Hostname to update
+hostname=ext.${zonename}
+
+## Desired TTL (time-to-live), in seconds
+ttl=600
+
+## Key file
+key=/root/K${zonename}.key
+
+[ "$INTERFACE" != "${wan}" ] && exit 0
+[ "$ACTION" != "ifup" ] && [ "$ACTION" != "update" ] && exit 0
+
+## This doesn't seem very necessary, because we run an NTP client.
+## But maybe it is useful when booting the router after some time.
+## NTP may take a while to converge.
+##
+rdate -s time.nist.gov
+
+## ## scan_interfaces puts a bunch of information in CONFIG_ variables.
+## ## But on my router, it fails to get the IP address of the WAN interface
+## ## (ge00).  Maybe this is because it isn't configured, but assigned
+## ## via DHCP? Anyway, we have to use a fallback method to get the address.
+## ##
+## include /lib/network
+## scan_interfaces
+## config_get ipaddr ${wan} ipaddr
+## if [ -z "${ipaddr}" ]
+## then
+##   : logger -t ${tag} -p ${facility}.warn "config_get did not find ipaddr, trying ip -4 addr show"
+  ipaddr=`ip -4 addr show dev ${wan} | grep inet | sed -e 's/.*inet \([.0-9]*\).*/\1/'`
+## fi
+
+## Now we construct a DNS UPDATE packet and send it to the
+## authoritative server.  We need to provide key material to authenticate.
+##
+echo "server $nameserver
+zone ${zonename}
+update delete ${hostname}. IN A
+update add ${hostname}. ${ttl} IN A $ipaddr
+send" | nsupdate -k ${key} -v || logger -t ${tag} -p ${facility}.error "Update $hostname IN A $ipaddr failed"
+logger -t ${tag} -p ${facility}.info "Updated $hostname IN A $ipaddr"
