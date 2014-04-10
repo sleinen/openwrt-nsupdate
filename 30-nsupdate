@@ -30,13 +30,13 @@ facility=daemon
 tag="30-nsupdate[$$]"
 
 ## Authoritative name server to update
-nameserver=scsnms.switch.ch
+nameserver=AUTH.NAMESERVER.EXAMPLE
 
 ## Zone to update
-zonename=router.leinen.ch
+zonename=MYZONE.EXAMPLE
 
 ## Hostname to update
-hostname=ext.${zonename}
+hostname=ROUTER.${zonename}
 
 ## Desired TTL (time-to-live), in seconds
 ttl=600
